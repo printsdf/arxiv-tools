@@ -6,7 +6,7 @@
 
 在 arXiv 页面一键直达 AlphaXiv、幻觉翻译与 MinerU PDF2MD；支持 MinerU 任务自动轮询、实时进度展示与 ZIP 压缩包一键下载。
 
-[![Version](https://img.shields.io/badge/version-5.4.0-blue.svg?style=flat-square)](https://github.com/printsdf/arxiv-tools)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg?style=flat-square)](https://github.com/printsdf/arxiv-tools)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Tampermonkey](https://img.shields.io/badge/Tampermonkey-Supported-00485B?style=flat-square&logo=tampermonkey)](https://www.tampermonkey.net/)
 [![Violentmonkey](https://img.shields.io/badge/Violentmonkey-Supported-BE1431?style=flat-square)](https://violentmonkey.github.io/)

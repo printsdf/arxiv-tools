@@ -2,7 +2,7 @@
 // @name              ArXiv Tools
 // @name:zh-CN        ArXiv 工具集
 // @namespace         https://github.com/printsdf/arxiv-tools
-// @version           5.4.0
+// @version           1.0.0
 // @description       AlphaXiv / 幻觉翻译 / MinerU PDF2MD (Auto-poll & Download)
 // @description:zh-CN 在 arXiv 页面添加 AlphaXiv、幻觉翻译、MinerU 入口；MinerU 支持自动轮询结果并弹窗下载
 // @author            printsdf
