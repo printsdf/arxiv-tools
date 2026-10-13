@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2024-2026 printsdf and contributors
+Copyright (c) 2026 printsdf
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,20 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-### Upstream Credits & Third-Party Code
-
-Portions of this software are based on or inspired by the following open-source projects:
-
-- **AlphaXiv Supercharger** (c) 2024 jkhuyvxw (Licensed under MIT)
-  Source: https://greasyfork.org/zh-CN/scripts/544529-alphaxiv-supercharger
-  The reciprocal "Back to ArXiv" button and page navigation logic in this userscript
-  originate from AlphaXiv Supercharger.
-
-- **ToAlphaXiv** (c) MajoranaOedipus (Licensed under MIT)
-  Source: https://greasyfork.org/zh-CN/scripts/502558-toalphaxiv
-
-- **ArXiv-AlphaXiv Navigator** (c) Henry Browne (Licensed under MIT)
-  Source: https://greasyfork.org/zh-CN/scripts/538595-arxiv-alphaxiv-navigator
