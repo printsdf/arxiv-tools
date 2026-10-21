@@ -121,8 +121,3 @@ This userscript builds upon and takes inspiration from several outstanding open-
 ## 📄 License
 
 This project is open-sourced under the [MIT License](LICENSE).
-
-
-### MinerU 精简 ZIP
-
-生成 `Paper Title.zip`，其中为 `Paper Title/Paper Title.md` 与 `Paper Title/images/`。使用浏览器端 JSZip 重新打包，并自动调整相对图片路径；原始 MinerU ZIP 仍可下载。大量图片可能占用较多浏览器内存。
