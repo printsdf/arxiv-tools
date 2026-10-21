@@ -6,7 +6,7 @@
 
 在 arXiv 页面一键直达 AlphaXiv、幻觉翻译与 MinerU PDF2MD；支持 MinerU 任务自动轮询、实时进度展示与 ZIP 压缩包一键下载。
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg?style=flat-square)](https://github.com/printsdf/arxiv-tools)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg?style=flat-square)](https://github.com/printsdf/arxiv-tools)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Tampermonkey](https://img.shields.io/badge/Tampermonkey-Supported-00485B?style=flat-square&logo=tampermonkey)](https://www.tampermonkey.net/)
 [![Violentmonkey](https://img.shields.io/badge/Violentmonkey-Supported-BE1431?style=flat-square)](https://violentmonkey.github.io/)
@@ -36,7 +36,7 @@
 - 📑 **MinerU PDF2MD 一键转换与下载**
   - 免去手动上传 PDF 的繁琐步骤，一键将当前 arXiv 论文提交至 MinerU v4 VLM 解析引擎。
   - **实时轮询进度**：直观展示排队状态、解析进度（如 `解析中 8/24 页`）、格式转换中等各阶段。
-  - **结果直接下载**：转换完成后弹出结果卡片，支持**一键下载完整 ZIP 压缩包**（内含 `full.md`、格式化公式/表格、高清图表与结构化 JSON 数据），或快速复制下载直链。
+  - **下载精简 ZIP**：转换完成后弹出结果卡片，支持按论文标题导出仅包含 Markdown 和图片的 ZIP，也可以下载原始结果 ZIP 或复制链接。
 - 🛡️ **MinerU Token 智能管理**
   - 内置 API 探测端点（`/extract/task/probe`），支持在面板中一键测试 Token 有效性。
   - 智能捕获 MinerU 90 天有效期过期状态（错误码 `A0211`），提醒重新生成。
@@ -83,7 +83,7 @@ MinerU PDF 转 Markdown 功能需要使用 MinerU 开放平台的 API Token（�
 - 📑 **MinerU PDF2MD Integration (Auto-poll & 1-Click Download)**
   - Sends the paper PDF directly to MinerU v4 VLM extraction API without manual download and re-upload.
   - **Live Progress Polling**: Real-time progress bar displaying current stages (`Queued`, `Extracting 8/24 pages`, `Formatting`).
-  - **Instant ZIP Download**: Modal popup with direct download link for the full ZIP bundle containing `full.md` (Markdown), math formulas, figures, and structural JSON.
+  - **Clean ZIP Export**: Modal popup with direct download link for the full ZIP bundle containing `full.md` (Markdown), math formulas, figures, and structural JSON.
 - 🛡️ **MinerU Token Inspector & Management**
   - Built-in connectivity & authorization probe (`/extract/task/probe`) to test token validity.
   - Automatically detects 90-day token expiration errors (`A0211`) and guides you to update.

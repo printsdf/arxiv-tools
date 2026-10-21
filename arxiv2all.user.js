@@ -2,7 +2,7 @@
 // @name              ArXiv Tools
 // @name:zh-CN        ArXiv 工具集
 // @namespace         https://github.com/printsdf/arxiv-tools
-// @version           1.0.0
+// @version           1.1.0
 // @description       AlphaXiv / 幻觉翻译 / MinerU PDF2MD (Auto-poll & Download)
 // @description:zh-CN 在 arXiv 页面添加 AlphaXiv、幻觉翻译、MinerU 入口；MinerU 支持自动轮询结果并弹窗下载
 // @author            printsdf
@@ -19,10 +19,12 @@
 // @match             https://www.alphaxiv.org/abs/*
 // @match             https://alphaxiv.org/abs/*
 // @icon              https://alphaxiv.org/icon.ico
+// @require           https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js
 // @grant             GM_setValue
 // @grant             GM_getValue
 // @grant             GM_xmlhttpRequest
 // @connect           mineru.net
+// @connect           *
 // @license           MIT
 // ==/UserScript==
 
@@ -795,6 +797,115 @@
         }
     }
 
+
+    function paperFilename(s) {
+        const name = String(s || arxivId).normalize('NFC').replace(/[\x00-\x1f\x7f<>:"/\\|?*]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/[. ]+$/g, '').slice(0, 120);
+        return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name) ? 'paper-' + name : (name || arxivId);
+    }
+
+    function currentPaperTitle() {
+        return paperFilename(document.querySelector('meta[name="citation_title"]')?.content ||
+            document.querySelector('h1.title')?.textContent?.replace(/^\s*Title:\s*/i, '') || arxivId);
+    }
+
+    function mineruZipBytes(url) {
+        return new Promise((resolve, reject) => {
+            try { if (new URL(url).protocol !== 'https:') throw Error('Requires HTTPS'); }
+            catch (e) { reject(e); return; }
+            GM_xmlhttpRequest({
+                method: 'GET', url, responseType: 'arraybuffer', timeout: 180000,
+                onload: r => r.status >= 200 && r.status < 300 && r.response
+                    ? resolve(r.response) : reject(Error('ZIP download HTTP ' + r.status)),
+                onerror: () => reject(Error('ZIP download failed')),
+                ontimeout: () => reject(Error('ZIP download timed out'))
+            });
+        });
+    }
+
+    async function compactMineruZip(bytes, title) {
+        const src = await JSZip.loadAsync(bytes), dst = new JSZip();
+        const files = Object.values(src.files).filter(f => !f.dir);
+        const mds = files.filter(f => /\.md$/i.test(f.name)).sort((a, b) =>
+            Number(!/(^|\/)full\.md$/i.test(a.name)) - Number(!/(^|\/)full\.md$/i.test(b.name)) ||
+            a.name.split('/').length - b.name.split('/').length);
+        if (!mds.length) throw Error('No Markdown file found');
+        const md = mds[0], mdDir = md.name.split('/').slice(0, -1).join('/');
+        const imgs = files.filter(f => /\.(png|jpe?g|gif|webp|svg|bmp|tiff?|avif)$/i.test(f.name));
+        const paths = new Map(), basenames = new Map(), used = new Set();
+        const canonical = p => {
+            const out = [];
+            for (const part of p.replace(/\\/g, '/').split('/')) {
+                if (!part || part === '.') continue;
+                if (part === '..') { if (!out.length) return null; out.pop(); }
+                else out.push(part);
+            }
+            return out.join('/');
+        };
+        const outputImages = [];
+        for (const file of imgs) {
+            const old = canonical(file.name);
+            if (!old) continue;
+            const basename = old.split('/').pop();
+            const ext = basename.match(/\.[^.]+$/)[0];
+            const stem = paperFilename(basename.slice(0, -ext.length)).slice(0, 90);
+            let name = stem + ext, n = 2;
+            while (used.has(name.toLowerCase())) name = stem + '-' + n++ + ext;
+            used.add(name.toLowerCase());
+            const path = 'images/' + name;
+            paths.set(old, path);
+            if (!basenames.has(basename)) basenames.set(basename, []);
+            basenames.get(basename).push(path);
+            outputImages.push([file, path]);
+        }
+        const missing = [];
+        const resolveRef = ref => {
+            if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(ref)) return null;
+            let cleaned = ref.split(/[?#]/)[0];
+            try { cleaned = decodeURIComponent(cleaned); } catch (_) {}
+            for (const candidate of [mdDir + '/' + cleaned, cleaned]) {
+                const path = paths.get(canonical(candidate));
+                if (path) return path.split('/').map(encodeURIComponent).join('/');
+            }
+            const alternatives = basenames.get(cleaned.split('/').pop());
+            if (alternatives?.length === 1) return alternatives[0].split('/').map(encodeURIComponent).join('/');
+            if (/\.(png|jpe?g|gif|webp|svg|bmp|tiff?|avif)$/i.test(cleaned)) missing.push(ref);
+            return null;
+        };
+        let body = await md.async('string');
+        body = body.replace(/(!\[[^\]]*\]\(\s*)(<[^>]+>|[^)\s]+)([^)]*\))/g, (all, before, ref, after) => {
+            const plain = ref.startsWith('<') && ref.endsWith('>') ? ref.slice(1, -1) : ref;
+            return before + (resolveRef(plain) || ref) + after;
+        });
+        body = body.replace(/(<img\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi, (all, before, quote, ref) =>
+            before + quote + (resolveRef(ref) || ref) + quote);
+        if (missing.length) throw Error('Unmatched image: ' + missing[0]);
+        const folder = paperFilename(title);
+        dst.file(folder + '/' + folder + '.md', body);
+        for (const [file, path] of outputImages) dst.file(folder + '/' + path, await file.async('uint8array'));
+        return dst.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    }
+
+    async function downloadCompactMineru(url, button, error) {
+        button.disabled = true;
+        button.textContent = '正在整理 ZIP…';
+        error.textContent = '';
+        try {
+            const title = currentPaperTitle();
+            const blob = await compactMineruZip(await mineruZipBytes(url), title);
+            const objUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objUrl; a.download = title + '.zip';
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
+            button.textContent = '已开始下载精简 ZIP';
+        } catch (e) {
+            button.textContent = '重试下载精简 ZIP';
+            error.textContent = '精简导出失败：' + e.message + '。请使用原始 ZIP。';
+        } finally {
+            button.disabled = false;
+        }
+    }
+
     // ── 结果弹窗（解析完成）──────────────────────────────────────────────────────
     function showResultPanel(arxivId, zipUrl, taskId) {
         const overlay = document.createElement('div');
@@ -810,13 +921,13 @@
 
         <div class="zx-desc">
           论文 <strong>${arxivId}</strong> 已成功转换为 Markdown。
-          ZIP 包内含 full.md（正文）、JSON 结构化数据及图片。
+          精简 ZIP 以论文标题命名，仅含 Markdown 和 images 图片。
         </div>
 
         <div class="zx-link-col">
-          <a href="${zipUrl}" target="_blank" download class="zx-btn zx-btn-primary">
-            ${ICONS.download} 下载 ZIP 结果包
-          </a>
+          <button id="mineru-clean-download" class="zx-btn zx-btn-primary">${ICONS.download} 下载精简 ZIP（Markdown + 图片）</button>
+          <div id="mineru-clean-error" class="zx-desc" role="alert"></div>
+          <a href="${escapeAttr(zipUrl)}" target="_blank" rel="noopener noreferrer" class="zx-btn zx-btn-ghost">${ICONS.download} 下载原始 ZIP</a>
           <button id="mineru-copy-url" class="zx-btn zx-btn-ghost">
             ${ICONS.copy} 复制下载链接
           </button>
@@ -836,6 +947,8 @@
             if (e.target === overlay) close();
         });
 
+        overlay.querySelector('#mineru-clean-download').addEventListener('click', () =>
+            downloadCompactMineru(zipUrl, overlay.querySelector('#mineru-clean-download'), overlay.querySelector('#mineru-clean-error')));
         overlay.querySelector('#mineru-copy-url').addEventListener('click', () => {
             navigator.clipboard.writeText(zipUrl).then(() => {
                 const btn = overlay.querySelector('#mineru-copy-url');
