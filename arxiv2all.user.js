@@ -2,7 +2,7 @@
 // @name              ArXiv Tools
 // @name:zh-CN        ArXiv 工具集
 // @namespace         https://github.com/printsdf/arxiv-tools
-// @version           1.1.1
+// @version           1.1.2
 // @description       AlphaXiv / 幻觉翻译 / MinerU PDF2MD (Auto-poll & Download)
 // @description:zh-CN 在 arXiv 页面添加 AlphaXiv、幻觉翻译、MinerU 入口；MinerU 支持自动轮询结果并弹窗下载
 // @author            printsdf
@@ -19,7 +19,7 @@
 // @match             https://www.alphaxiv.org/abs/*
 // @match             https://alphaxiv.org/abs/*
 // @icon              https://alphaxiv.org/icon.ico
-// @require           https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js
+// @require           https://cdn.jsdelivr.net/npm/jszip@3.9.1/dist/jszip.min.js
 // @grant             GM_setValue
 // @grant             GM_getValue
 // @grant             GM_xmlhttpRequest
@@ -28,6 +28,8 @@
 // @license           MIT
 // ==/UserScript==
 
+// jszip 固定 3.9.1：3.10+ 的 setImmediate polyfill 在 Tampermonkey 沙箱中不触发，
+// async/generateAsync 会永久挂起（upstream issue Stuk/jszip#934）。
 (function () {
     'use strict';
 
