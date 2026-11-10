@@ -2,7 +2,7 @@
 // @name              ArXiv Tools
 // @name:zh-CN        ArXiv 工具集
 // @namespace         https://github.com/printsdf/arxiv-tools
-// @version           1.1.0
+// @version           1.1.1
 // @description       AlphaXiv / 幻觉翻译 / MinerU PDF2MD (Auto-poll & Download)
 // @description:zh-CN 在 arXiv 页面添加 AlphaXiv、幻觉翻译、MinerU 入口；MinerU 支持自动轮询结果并弹窗下载
 // @author            printsdf
@@ -42,7 +42,6 @@
         translate: svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.3 2.5 3.6 5.6 3.6 9s-1.3 6.5-3.6 9c-2.3-2.5-3.6-5.6-3.6-9s1.3-6.5 3.6-9z"/>'),
         mineru: svg('<path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"/><path d="M13 3v6h6"/><path d="M9.2 16.2L12 19l2.8-2.8"/><path d="M12 12.5v6"/>'),
         download: svg('<path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 19h14"/>'),
-        copy: svg('<rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>'),
         gear: svg('<circle cx="12" cy="12" r="3.2"/><path d="M12 5V3.5M12 20.5V19M19 12h1.5M3.5 12H5M17.1 6.9l1.1-1.1M5.8 18.2l1.1-1.1M17.1 17.1l1.1 1.1M5.8 5.8l1.1 1.1"/>'),
         check: svg('<path d="M20 6L9 17l-5-5"/>'),
         alert: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.2h.01"/>'),
@@ -808,21 +807,42 @@
             document.querySelector('h1.title')?.textContent?.replace(/^\s*Title:\s*/i, '') || arxivId);
     }
 
+    const log = (...args) => console.log('[ArXiv Tools]', ...args);
+    const fmtSize = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1024).toFixed(0) + ' KB';
+
     function mineruZipBytes(url) {
         return new Promise((resolve, reject) => {
             try { if (new URL(url).protocol !== 'https:') throw Error('Requires HTTPS'); }
             catch (e) { reject(e); return; }
+            const startedAt = Date.now();
+            let lastPct = -1;
+            log('开始从 MinerU 下载 ZIP：' + url);
             GM_xmlhttpRequest({
-                method: 'GET', url, responseType: 'arraybuffer', timeout: 180000,
-                onload: r => r.status >= 200 && r.status < 300 && r.response
-                    ? resolve(r.response) : reject(Error('ZIP download HTTP ' + r.status)),
+                method: 'GET', url, responseType: 'arraybuffer', timeout: 600000,
+                onprogress: r => {
+                    if (!r.lengthComputable || !r.total) return;
+                    const bucket = Math.floor((r.loaded / r.total) * 20) * 5;
+                    if (bucket === lastPct) return;
+                    lastPct = bucket;
+                    log(`下载 MinerU ZIP ${bucket}%（${fmtSize(r.loaded)} / ${fmtSize(r.total)}）`);
+                },
+                onload: r => {
+                    if (r.status >= 200 && r.status < 300 && r.response) {
+                        log(`MinerU ZIP 下载完成：${fmtSize(r.response.byteLength || 0)}，耗时 ${((Date.now() - startedAt) / 1000).toFixed(1)} 秒`);
+                        resolve(r.response);
+                    } else {
+                        reject(Error('ZIP download HTTP ' + r.status));
+                    }
+                },
                 onerror: () => reject(Error('ZIP download failed')),
                 ontimeout: () => reject(Error('ZIP download timed out'))
             });
         });
     }
 
-    async function compactMineruZip(bytes, title) {
+    async function buildPaperZip(bytes, title) {
+        const startedAt = Date.now();
+        log(`开始整理 ZIP（源大小 ${fmtSize(bytes.byteLength)}）`);
         const src = await JSZip.loadAsync(bytes), dst = new JSZip();
         const files = Object.values(src.files).filter(f => !f.dir);
         const mds = files.filter(f => /\.md$/i.test(f.name)).sort((a, b) =>
@@ -831,6 +851,7 @@
         if (!mds.length) throw Error('No Markdown file found');
         const md = mds[0], mdDir = md.name.split('/').slice(0, -1).join('/');
         const imgs = files.filter(f => /\.(png|jpe?g|gif|webp|svg|bmp|tiff?|avif)$/i.test(f.name));
+        log(`源 ZIP 共 ${files.length} 个文件，使用 Markdown：${md.name}，图片 ${imgs.length} 张`);
         const paths = new Map(), basenames = new Map(), used = new Set();
         const canonical = p => {
             const out = [];
@@ -880,27 +901,44 @@
             before + quote + (resolveRef(ref) || ref) + quote);
         if (missing.length) throw Error('Unmatched image: ' + missing[0]);
         const folder = paperFilename(title);
-        dst.file(folder + '/' + folder + '.md', body);
-        for (const [file, path] of outputImages) dst.file(folder + '/' + path, await file.async('uint8array'));
-        return dst.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+        dst.file(folder + '/' + folder + '.md', body, { compression: 'DEFLATE' });
+        let done = 0;
+        for (const [file, path] of outputImages) {
+            // 图片已是压缩格式，再 DEFLATE 只会白耗 CPU
+            dst.file(folder + '/' + path, await file.async('uint8array'), { compression: 'STORE' });
+            done++;
+            if (done === outputImages.length || done % 10 === 0) log(`已读取图片 ${done}/${outputImages.length}`);
+        }
+        log(`素材读取完成，耗时 ${((Date.now() - startedAt) / 1000).toFixed(1)} 秒，开始生成 ZIP`);
+        let lastGenPct = -1;
+        const blob = await dst.generateAsync(
+            { type: 'blob', compression: 'STORE', compressionOptions: { level: 6 } },
+            (meta) => {
+                const bucket = Math.floor((meta.percent || 0) / 10) * 10;
+                if (bucket === lastGenPct) return;
+                lastGenPct = bucket;
+                log(`生成 ZIP ${bucket}%${meta.currentFile ? '：' + meta.currentFile : ''}`);
+            });
+        log(`ZIP 生成完成：${fmtSize(blob.size)}，总耗时 ${((Date.now() - startedAt) / 1000).toFixed(1)} 秒`);
+        return blob;
     }
 
-    async function downloadCompactMineru(url, button, error) {
+    async function downloadPaperZip(url, button, error) {
         button.disabled = true;
         button.textContent = '正在整理 ZIP…';
         error.textContent = '';
         try {
             const title = currentPaperTitle();
-            const blob = await compactMineruZip(await mineruZipBytes(url), title);
+            const blob = await buildPaperZip(await mineruZipBytes(url), title);
             const objUrl = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = objUrl; a.download = title + '.zip';
             document.body.appendChild(a); a.click(); a.remove();
             setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
-            button.textContent = '已开始下载精简 ZIP';
+            button.textContent = '已开始下载';
         } catch (e) {
-            button.textContent = '重试下载精简 ZIP';
-            error.textContent = '精简导出失败：' + e.message + '。请使用原始 ZIP。';
+            button.textContent = '重试下载';
+            error.textContent = '导出失败：' + e.message;
         } finally {
             button.disabled = false;
         }
@@ -921,19 +959,12 @@
 
         <div class="zx-desc">
           论文 <strong>${arxivId}</strong> 已成功转换为 Markdown。
-          精简 ZIP 以论文标题命名，仅含 Markdown 和 images 图片。
+          ZIP 以论文标题命名，包含 Markdown 文件和图片。
         </div>
 
         <div class="zx-link-col">
-          <button id="mineru-clean-download" class="zx-btn zx-btn-primary">${ICONS.download} 下载精简 ZIP（Markdown + 图片）</button>
-          <div id="mineru-clean-error" class="zx-desc" role="alert"></div>
-          <a href="${escapeAttr(zipUrl)}" target="_blank" rel="noopener noreferrer" class="zx-btn zx-btn-ghost">${ICONS.download} 下载原始 ZIP</a>
-          <button id="mineru-copy-url" class="zx-btn zx-btn-ghost">
-            ${ICONS.copy} 复制下载链接
-          </button>
-          <button id="mineru-open-mineru" class="zx-btn zx-btn-ghost">
-            ${ICONS.alphaxiv} 在 MinerU 网页查看
-          </button>
+          <button id="mineru-zip-download" class="zx-btn zx-btn-primary">${ICONS.download} 下载 ZIP（Markdown + 图片）</button>
+          <div id="mineru-zip-error" class="zx-desc" role="alert"></div>
         </div>
 
         <div class="zx-task-id">Task ID: <code>${taskId}</code></div>
@@ -947,19 +978,7 @@
             if (e.target === overlay) close();
         });
 
-        overlay.querySelector('#mineru-clean-download').addEventListener('click', () =>
-            downloadCompactMineru(zipUrl, overlay.querySelector('#mineru-clean-download'), overlay.querySelector('#mineru-clean-error')));
-        overlay.querySelector('#mineru-copy-url').addEventListener('click', () => {
-            navigator.clipboard.writeText(zipUrl).then(() => {
-                const btn = overlay.querySelector('#mineru-copy-url');
-                const old = btn.innerHTML;
-                btn.innerHTML = `${ICONS.check} 已复制`;
-                setTimeout(() => (btn.innerHTML = old), 1500);
-            });
-        });
-
-        overlay.querySelector('#mineru-open-mineru').addEventListener('click', () => {
-            window.open('https://mineru.net/apiManage/task', '_blank');
-        });
+        overlay.querySelector('#mineru-zip-download').addEventListener('click', () =>
+            downloadPaperZip(zipUrl, overlay.querySelector('#mineru-zip-download'), overlay.querySelector('#mineru-zip-error')));
     }
 })();
